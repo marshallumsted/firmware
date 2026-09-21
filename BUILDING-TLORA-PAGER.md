@@ -83,6 +83,63 @@ Note the Meshtastic partition scheme gives the app 6.25 MB, unlike LilyGo's
 stock 3 MB APP / 9.9 MB FATFS layout. Flashing `factory.bin` to `0x0` rewrites
 the partition table accordingly.
 
+## CRITICAL: Bluetooth must be disabled
+
+A freshly flashed node defaults to `bluetooth.enabled = true`, and with that set
+**the on-device UI never starts**. You get the Meshtastic boot screen forever,
+no keyboard, no encoder, and the screen eventually sleeps.
+
+The cause is in `src/mesh/api/PacketAPI.cpp`:
+
+```cpp
+int32_t PacketAPI::runOnce()
+{
+    if (config.bluetooth.enabled) {
+        if (!programmingMode) {
+            programmingMode = true;
+            success = notifyProgrammingMode();   // sends BT config once, then latches
+        }
+    } else {
+        success = sendPacket();                  // never reached while BT is on
+    }
+    success |= receivePacket();
+}
+```
+
+`receivePacket()` still runs, so the node logs `Screen wants config, nonce=N`
+every 10s, but `sendPacket()` is never called and `config_complete_id` is never
+emitted. The UI stays at `eBootScreenDone` and re-requests config forever.
+
+**MUI and Bluetooth are mutually exclusive on this architecture.** Turn BT off
+after flashing:
+
+```bash
+meshtastic --port /dev/ttyACM1 --set bluetooth.enabled false
+```
+
+This persists in NVS across reboots. Re-enabling Bluetooth will freeze the UI
+at the boot screen again.
+
+### Note on the config-retry commit
+
+This branch carries a commit backing the device-ui config retry off from 10s to
+60s. It was written while chasing a suspected livelock and is **not** the fix;
+the real cause was the Bluetooth branch above. It is harmless and left in place
+so the branch matches the firmware that was flashed and verified, but it can be
+reverted without affecting behaviour.
+
+## Verified working
+
+Flashed and confirmed on real SX1262 hardware:
+
+- boots to the MUI home menu, keyboard and scroll wheel responsive
+- SX1262 radio initialises (`SX126x AGC reset: warm sleep + Calibrate(0x7F)`)
+- power/charger via BQ25896 reports correctly
+
+Known issue: the BQ27220 fuel gauge fails its data-memory write with
+`i2c_master_transmit failed: ESP_ERR_INVALID_STATE` and the driver falls back to
+the BQ25896 for battery state. Cosmetic; charging is unaffected.
+
 ## Map tiles
 
 Tiles are not included. The map layer reads, in order of preference:
