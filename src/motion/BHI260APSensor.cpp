@@ -23,13 +23,6 @@ bool BHI260APSensor::init()
     LOG_WARN("Initializing BHI260AP sensor %u", deviceAddress());
     sensor.setFirmware(bosch_firmware_image, bosch_firmware_size, bosch_firmware_type);
     sensor.setBootFromFlash(bosch_firmware_type);
-    // SensorLib defaults to I2C_BUFFER_LENGTH/2 (64 bytes) per transfer. Register
-    // reads at that size work, but the first bulk write of the firmware upload
-    // fails on the ESP32-S3 with ESP_ERR_INVALID_STATE out of
-    // i2c_master_transmit(), leaving the IMU dead ("Failed to upload firmware to
-    // RAM" / "BHI260AP init failed"). The S3's I2C FIFO is 32 bytes; hold
-    // transfers to that so the upload never straddles a refill.
-    sensor.setMaxiTransferSize(32);
     if (sensor.begin(Wire, deviceAddress())) {
         sensor.setRemapAxes(SensorRemap::TOP_LAYER_BOTTOM_RIGHT_CORNER);
         BoschSensorInfo info = sensor.getSensorInfo();
