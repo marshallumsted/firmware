@@ -23,7 +23,22 @@ bool BHI260APSensor::init()
     LOG_WARN("Initializing BHI260AP sensor %u", deviceAddress());
     sensor.setFirmware(bosch_firmware_image, bosch_firmware_size, bosch_firmware_type);
     sensor.setBootFromFlash(bosch_firmware_type);
+#ifdef T_LORA_PAGER
+    // LilyGo's reference bring-up for this board (LilyGoLib, LilyGo_LoRa_Pager.cpp
+    // initSensor()) raises the bus to 1 MHz around sensor.begin() and drops it
+    // back afterwards. At the 100 kHz Meshtastic otherwise runs the bus at, the
+    // chip ID reads back fine but the BHI260AP rejects the first bulk firmware
+    // upload write, which surfaces as ESP_ERR_INVALID_STATE out of
+    // i2c_master_transmit() and leaves the IMU dead. Mirror the vendor sequence
+    // and restore whatever clock the bus was running at.
+    const uint32_t busHz = Wire.getClock();
+    Wire.setClock(1000000UL);
+    const bool sensorUp = sensor.begin(Wire, deviceAddress());
+    Wire.setClock(busHz);
+    if (sensorUp) {
+#else
     if (sensor.begin(Wire, deviceAddress())) {
+#endif
         sensor.setRemapAxes(SensorRemap::TOP_LAYER_BOTTOM_RIGHT_CORNER);
         BoschSensorInfo info = sensor.getSensorInfo();
 
