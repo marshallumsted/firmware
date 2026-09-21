@@ -4471,6 +4471,19 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         }
 #endif
         LOG_INFO("Add node to database: %i nodes, %u bytes free", numMeshNodes, memGet.getFreeHeap());
+
+        // The node database is otherwise only written on deep sleep (sleep.cpp) or
+        // shutdown (Power.cpp). A mains-powered device running with
+        // power.is_power_saving disabled reaches neither, so every node learned
+        // since boot is lost on the next restart and the mesh has to be
+        // rediscovered. Persist new arrivals here instead, rate limited so a busy
+        // mesh cannot hammer the flash.
+        static uint32_t lastNodeAddSaveMs = 0;
+        const uint32_t nowMs = millis();
+        if (lastNodeAddSaveMs == 0 || (nowMs - lastNodeAddSaveMs) >= 60 * 1000) {
+            lastNodeAddSaveMs = nowMs;
+            saveNodeDatabaseToDisk();
+        }
     }
 
     return lite;
