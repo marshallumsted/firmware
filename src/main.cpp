@@ -1478,6 +1478,7 @@ void loop()
     rp2040Loop();
 #endif
     power->powerCommandsCheck();
+    nodeDB->saveNodeDatabaseIfDirty();
 
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
